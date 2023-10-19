@@ -2,6 +2,19 @@
 
 #include "Walnut/Random.h"
 
+namespace Utils
+{
+	static uint32_t ConvertToRGBA(const glm::vec4& color)
+	{
+		uint8_t r = (uint8_t)(color.r * 255.0f);
+		uint8_t g = (uint8_t)(color.g * 255.0f);
+		uint8_t b = (uint8_t)(color.b * 255.0f);
+		uint8_t a = (uint8_t)(color.a * 255.0f);
+
+		return (a << 24) | (b << 16) | (g << 8) | r;
+	}
+}
+
 void Renderer::OnResize(uint32_t width, uint32_t height)
 {
 	if (m_FinalImage)
@@ -28,20 +41,23 @@ void Renderer::Render()
 		{
 			glm::vec2 coord = { x / (float)m_FinalImage->GetWidth(),  y / (float)m_FinalImage->GetHeight()};
 			coord = coord * 2.0f - 1.0f;
-			m_ImageData[y * m_FinalImage->GetWidth() + x] = PerPixel({ coord });
+
+			glm::vec4 color = PerPixel(coord);
+			color = glm::clamp(color, 0.0f, 1.0f);
+			m_ImageData[y * m_FinalImage->GetWidth() + x] = Utils::ConvertToRGBA(color);
 		}
 	}
 	m_FinalImage->SetData(m_ImageData);
 }
 
-uint32_t Renderer::PerPixel(glm::vec2 coord)
+glm::vec4 Renderer::PerPixel(glm::vec2 coord)
 {
 	uint8_t r = (uint8_t)(coord.x * 255.0f);
 	uint8_t g = (uint8_t)(coord.y * 255.0f);
 
 	glm::vec3 rayOrigin = { 0.0f, 0.0f, 2.0f };
 	glm::vec3 rayDirection = { coord.x, coord.y, -1.0f };
-	rayDirection = glm::normalize(rayDirection);
+	//rayDirection = glm::normalize(rayDirection);
 	float radius = 0.5f;
 
 	//(bx^2 + by^2)t^2 + 2(abxb + ayby)t + (ax^2 + ay^2 - r^2) = 0
@@ -55,7 +71,33 @@ uint32_t Renderer::PerPixel(glm::vec2 coord)
 
 	// Discriminant = b^2 - 4ac
 	float discriminant = b * b - 4.0f * a * c;
-	if (discriminant >= 0)
-		return 0xFF000000 | (r << 16) | (g << 8) | 0xFF;
-	return 0xFF000000;
+	if (discriminant < 0.0f)
+	{
+		return glm::vec4( 0,0,0,1 );
+	}
+	else
+	{
+		float t[]{
+			(-b - sqrt(discriminant)) / (2.0f * a),
+			(-b + sqrt(discriminant)) / (2.0f * a)
+		};
+		glm::vec3 lightDir = glm::normalize(glm::vec3(-2.0f, -2.0f, 2.0f)); 
+
+		for (int i = 0; i < 1; i++)
+		{
+			if (t[i] > 0.0f)
+			{
+				glm::vec3 hitPoint = rayOrigin + rayDirection * t[i];
+				glm::vec3 normal = hitPoint - rayOrigin;
+				normal = glm::normalize(normal);
+
+				float intensity =  glm::dot(normal, -lightDir);
+				intensity = glm::max(intensity, 0.0f);
+
+				glm::vec3 color = { 1,0,1 };
+				color *= intensity;
+				return glm::vec4(color,1.0f);
+			}
+		}
+	}
 }
