@@ -1,6 +1,6 @@
 # Vulkan Ray Tracing Renderer: The Next-Level Graphics Engine
 
-![UI Sample](UI_sample.png)
+![UI Sample](UI_Sample.png)
 
 This is an advanced graphics rendering project built on top of the Walnut App Template. It utilizes the Vulkan API to produce high-quality ray-traced graphics. Unlike the basic Walnut example, this project keeps Walnut as an external submodule, ideal for building scalable and complex applications.
 
