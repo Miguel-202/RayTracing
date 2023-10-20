@@ -7,6 +7,9 @@
 #include "Ray.h"
 #include "Scene.h"
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//	IF YOU ARE SEEING THIS, THIS IS NOT THE LATES VERSION, GO TO https://github.com/Miguel-202/RayTracing FOR THE LATEST VERSION//
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class Renderer
 {
 public:
@@ -42,6 +45,8 @@ private:
 private:
 	std::shared_ptr<Walnut::Image> m_FinalImage;
 	Settings m_Settings;
+
+	std::vector<uint32_t> m_ImageHorizontalIt, m_ImageVerticalIt;
 
 	const Camera* m_ActiveCamera = nullptr;
 	const Scene* m_ActiveScene = nullptr;
