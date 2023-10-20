@@ -16,12 +16,19 @@ public:
 	ExampleLayer()
 		: m_Camera(45.0f, 0.1f, 100.0f) 
 	{
+		Material& pinkSphere = m_Scene.Materials.emplace_back();
+		pinkSphere.Albedo = { 1.0f, 0.0f, 1.0f };
+		pinkSphere.Roughness = 0.0f;
+
+		Material& blueSphere = m_Scene.Materials.emplace_back();
+		blueSphere.Albedo = { 0.2f, 0.3f, 1.0f };
+		blueSphere.Roughness = 0.1f;
 		{
 			// Purple sphere in the middle
 			Sphere sphere;
 			sphere.Position = { 0.0f, 0.0f, 0.0f };
 			sphere.Radius = 1.0f;
-			sphere.Mat.Albedo = { 1.0f, 0.0f, 1.0f };
+			sphere.MaterialIndex = 0;
 			m_Scene.Spheres.push_back(sphere);
 		}
 		{
@@ -29,14 +36,15 @@ public:
 			Sphere sphere;
 			sphere.Position = { 0.0f, -101.0f, -0.0f };
 			sphere.Radius = 100.0f;
-			sphere.Mat.Albedo = { 0.2f, 0.3f, 1.0f };
+			sphere.MaterialIndex = 1;
 			m_Scene.Spheres.push_back(sphere);
 		}
 	}
 	
 	virtual void OnUpdate(float ts) override
 	{
-		m_Camera.OnUpdate(ts);
+		if(m_Camera.OnUpdate(ts))
+			m_Renderer.ResetFrameIndex();
 	}
 	virtual void OnUIRender() override
 	{
@@ -45,6 +53,11 @@ public:
 		if (ImGui::Button("Render"))
 		{
 			Render();
+		}
+		ImGui::Checkbox("Accumulate", &m_Renderer.GetSettings().Accumulate);
+		if (ImGui::Button("Reset"))
+		{
+			m_Renderer.ResetFrameIndex();
 		}
 		ImGui::End();
 
@@ -55,12 +68,22 @@ public:
 			Sphere& sphere = m_Scene.Spheres[i];
 			ImGui::DragFloat3("Position", glm::value_ptr(sphere.Position), 0.1f);
 			ImGui::DragFloat("Radious", &sphere.Radius, 0.01f);
-			ImGui::ColorEdit3("Albedo", glm::value_ptr(sphere.Mat.Albedo));
-			ImGui::DragFloat("Roughnes", &sphere.Mat.Roughness);
-			ImGui::DragFloat("Metalic", &sphere.Mat.Metallic);
+			ImGui::DragInt("Material Index", &sphere.MaterialIndex, 1.0f, 0, m_Scene.Materials.size() - 1);
 			ImGui::Separator();
 			ImGui::PopID();
 		}
+
+		for (size_t i = 0; i < m_Scene.Materials.size(); i++)
+		{
+			ImGui::PushID(i);
+			Material& mat = m_Scene.Materials[i];
+			ImGui::ColorEdit3("Albedo", glm::value_ptr(mat.Albedo));
+			ImGui::DragFloat("Roughnes", &mat.Roughness, 0.05f, 0.0f, 1.0f);
+			ImGui::DragFloat("Metalic", &mat.Metallic, 0.05f, 0.0f, 1.0f);
+			ImGui::Separator();
+			ImGui::PopID();
+		}
+
 		ImGui::End();
 
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
