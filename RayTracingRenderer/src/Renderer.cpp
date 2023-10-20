@@ -2,6 +2,8 @@
 
 #include "Walnut/Random.h"
 
+#include <execution>
+
 namespace Utils
 {
 	static uint32_t ConvertToRGBA(const glm::vec4& color)
@@ -34,6 +36,13 @@ void Renderer::OnResize(uint32_t width, uint32_t height)
 
 	delete[] m_AccumulationData;
 	m_AccumulationData = new glm::vec4[width * height];
+
+	m_ImageHorizontalIt.resize(width);
+	m_ImageVerticalIt.resize(height);
+	for (uint32_t i = 0; i < width; i++)
+		m_ImageHorizontalIt[i] = i;
+	for (uint32_t i = 0; i < height; i++)
+		m_ImageVerticalIt[i] = i;
 }
 
 void Renderer::Render(const Scene& scene, const Camera& camera)
@@ -44,6 +53,39 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 	if (m_FrameIndex == 1)
 		memset(m_AccumulationData, 0, m_FinalImage->GetWidth() * m_FinalImage->GetHeight() * sizeof(glm::vec4));
 
+#define MT 1
+#if MT
+
+	std::for_each(std::execution::par, m_ImageVerticalIt.begin(), m_ImageVerticalIt.end(),
+		[this](uint32_t y)
+		{
+			for (uint32_t x = 0; x < m_FinalImage->GetWidth(); x++)
+			{
+				glm::vec4 color = PerPixel(x, y);
+				m_AccumulationData[y * m_FinalImage->GetWidth() + x] += color;
+
+				glm::vec4 accumulatedColor = m_AccumulationData[y * m_FinalImage->GetWidth() + x];
+				accumulatedColor /= (float)m_FrameIndex;
+
+				accumulatedColor = glm::clamp(accumulatedColor, 0.0f, 1.0f);
+				m_ImageData[y * m_FinalImage->GetWidth() + x] = Utils::ConvertToRGBA(accumulatedColor);
+			}
+	#if 0 //0 for assigning threads to rows, 1 for assigning threads to individual pixels
+			std::for_each(std::execution::par, m_ImageHorizontalIt.begin(), m_ImageHorizontalIt.end(),
+			[this, y](uint32_t x)
+				{
+					glm::vec4 color = PerPixel(x, y);
+					m_AccumulationData[y * m_FinalImage->GetWidth() + x] += color;
+
+					glm::vec4 accumulatedColor = m_AccumulationData[y * m_FinalImage->GetWidth() + x];
+					accumulatedColor /= (float)m_FrameIndex;
+
+					accumulatedColor = glm::clamp(accumulatedColor, 0.0f, 1.0f);
+					m_ImageData[y * m_FinalImage->GetWidth() + x] = Utils::ConvertToRGBA(accumulatedColor);
+				});
+	#endif
+		});
+#else
 	for (uint32_t y = 0; y < m_FinalImage->GetHeight(); y++)
 	{
 		for (uint32_t x = 0; x < m_FinalImage->GetWidth(); x++)
@@ -58,6 +100,7 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 			m_ImageData[y * m_FinalImage->GetWidth() + x] = Utils::ConvertToRGBA(accumulatedColor);
 		}
 	}
+#endif
 	m_FinalImage->SetData(m_ImageData);
 
 	if(m_Settings.Accumulate)
