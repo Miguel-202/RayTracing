@@ -18,6 +18,27 @@ namespace Utils
 
 		return (a << 24) | (b << 16) | (g << 8) | r;
 	}
+
+	static uint32_t PCG_Hash(uint32_t input)
+	{
+		uint32_t state = input * 747796405u + 2891336453u;
+		uint32_t word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+		return (word >> 22u) ^ word;
+	}
+
+	static float RandomFloat(uint32_t& seed)
+	{
+		seed = PCG_Hash(seed);
+		return (float)seed / (float)std::numeric_limits<uint32_t>::max();
+	}
+	
+	static glm::vec3 InUnitSphere(uint32_t& seed)
+	{
+		return glm::normalize(glm::vec3(
+			RandomFloat(seed) * 2.0f - 1.0f, 
+			RandomFloat(seed) * 2.0f - 1.0f, 
+			RandomFloat(seed) * 2.0f - 1.0f));
+	}
 }
 
 void Renderer::OnResize(uint32_t width, uint32_t height)
@@ -56,12 +77,14 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 	if (m_FrameIndex == 1)
 		memset(m_AccumulationData, 0, m_FinalImage->GetWidth() * m_FinalImage->GetHeight() * sizeof(glm::vec4));
 
-#define MT 1
+#define MT 1 //1 for multithreading, 0 for singlethreading
+#define PER_ROW 0 //1 for assigning threads to rows, 0 for assigning threads to individual pixels
 #if MT
-
+	
 	std::for_each(std::execution::par, m_ImageVerticalIt.begin(), m_ImageVerticalIt.end(),
 		[this](uint32_t y)
 		{
+	#if PER_ROW
 			for (uint32_t x = 0; x < m_FinalImage->GetWidth(); x++)
 			{
 				glm::vec4 color = PerPixel(x, y);
@@ -73,7 +96,7 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 				accumulatedColor = glm::clamp(accumulatedColor, 0.0f, 1.0f);
 				m_ImageData[y * m_FinalImage->GetWidth() + x] = Utils::ConvertToRGBA(accumulatedColor);
 			}
-	#if 0 //0 for assigning threads to rows, 1 for assigning threads to individual pixels
+	#else 
 			std::for_each(std::execution::par, m_ImageHorizontalIt.begin(), m_ImageHorizontalIt.end(),
 			[this, y](uint32_t x)
 				{
@@ -121,34 +144,33 @@ glm::vec4 Renderer::PerPixel(uint32_t x, uint32_t y)
 		return glm::vec4(0, 0, 0, 1);
 	ray.Direction = m_ActiveCamera->GetRayDirections()[index];
 	
-	glm::vec3 color(0.0f);
-	float multiplier = 1.0f;
+	glm::vec3 light(0.0f);
+	glm::vec3 contribution = { 1.0f, 1.0f, 1.0f };
+
+	uint32_t seed = x + y * m_FinalImage->GetWidth();
+	seed *= m_FrameIndex;
 	for (int i = 0; i < m_MaxBounces; i++)
 	{
+		seed += i;
 		HitPayLoad payload = TraceRay(ray);
-		if (payload.Hitdistance < 0.0f)
+		if (payload.Hitdistance < 0.0f) 
 		{
-			glm::vec3 skyColor = glm::vec3(0.166f, 0.233f, 0.333f);
-			color += skyColor * multiplier;
+			glm::vec3 skyColor = glm::vec3(0.05533f, 0.07766f, 0.1111f);
+			light += skyColor * contribution;
 			break;
 		}
 
-		glm::vec3 lightDir = glm::normalize(glm::vec3(-2.0f, -2.0f, 2.0f));
-		float intensity = glm::max(glm::dot(payload.Normal, -lightDir), 0.0f);
-
 		const Sphere& sphere = m_ActiveScene->Spheres[payload.ObjectIndex];
 		const Material& material = m_ActiveScene->Materials[sphere.MaterialIndex];
-		glm::vec3 objectColor = material.Albedo;
-		objectColor *= intensity;
-		color += objectColor * multiplier;
-		multiplier *= 0.6f;
+
+		contribution *= material.Albedo;
+		light += material.GetEmmision();
 
 		ray.Origin =payload.Position + payload.Normal * 0.0001f;
-		ray.Direction = glm::reflect(ray.Direction,
-			payload.Normal + material.Roughness * Walnut::Random::Vec3(-0.5f, 0.5f));
+		ray.Direction = glm::normalize(payload.Normal + Utils::InUnitSphere(seed)); 
 	}
 
-	return glm::vec4(color, 1.0f);
+	return glm::vec4(light, 1.0f);
 }
 
 Renderer::HitPayLoad  Renderer::TraceRay(const Ray& ray)
@@ -180,7 +202,7 @@ Renderer::HitPayLoad  Renderer::TraceRay(const Ray& ray)
 			(-b + sqrt(discriminant)) / (2.0f * a)
 		};
 		float closesT = std::min(t[0], t[1]);
-		//for (int j = 0; j < 1; j++)
+		//for (int j = 0; j < 1; j++) //If we want to check both t's, could be useful for refraction
 		{
 			if (closesT > 0.0f && closesT < hitDistance)
 			{
